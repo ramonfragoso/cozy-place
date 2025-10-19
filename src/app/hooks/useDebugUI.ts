@@ -20,8 +20,30 @@ export const useDebugUI = () => {
     rotationSpeed: { value: 0.005, min: 0, max: 0.02, step: 0.001 },
   });
 
+  const blanketControls = useControls("Blanket", {
+    colorA: "#c44e4e",
+    colorB: "#f1d29f",
+    stripeScale: { value: 20, min: 0, max: 200, step: 1 },
+    colorDepth: { value: 8, min: 2, max: 64, step: 1 },
+    ditherScale: { value: 2, min: 0.1, max: 32, step: 0.1 },
+  });
+
+  const postprocessingControls = useControls("Postprocessing", {
+    enabled: true,
+    colorDepth: { value: 6, min: 2, max: 64, step: 1 },
+    ditherScale: { value: 0.2, min: 0.1, max: 32, step: 0.1 },
+  });
+
+  const cameraControls = useControls("Camera", {
+    position: { value: [-0.4, 2.3, -1.4], min: -10, max: 10, step: 0.1 },
+    fov: { value: 80, min: 0, max: 100, step: 0.1 },
+  });
+
   return {
     lighting: lightingControls,
     model: modelControls,
+    blanket: blanketControls,
+    postprocessing: postprocessingControls,
+    camera: cameraControls,
   };
 };

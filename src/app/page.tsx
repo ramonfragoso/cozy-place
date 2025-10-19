@@ -1,39 +1,31 @@
 "use client";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { PointerLockControls } from "@react-three/drei";
 import * as THREE from "three";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useDebugUI } from "./hooks/useDebugUI";
 import { Leva } from "leva";
-import { GLBModel } from "./components/GLBModel";
+import { CozyRoom } from "./components/CozyRoom";
 import { Lights } from "./components/Lights";
+import { Postprocessing } from "./components/Postprocessing";
 
 
-function ModelControls() {
-  const { model } = useDebugUI();
-  const {
-    position,
-    scale,
-    rotation,
-    autoRotate,
-    rotationSpeed,
-  } = model;
-
-  return (
-    <GLBModel 
-      url="/cozy_room.glb"
-      position={position as [number, number, number]}
-      scale={scale as [number, number, number]}
-      rotation={rotation as [number, number, number]}
-      autoRotate={autoRotate}
-      rotationSpeed={rotationSpeed}
-    />
-  );
-}
 
 export default function Home() {
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  useDebugUI(); 
+  const { camera } = useDebugUI();
+
+  useEffect(() => {
+    const cam = cameraRef.current;
+    if (!cam) return;
+    cam.position.set(
+      (camera.position as number[])[0],
+      (camera.position as number[])[1],
+      (camera.position as number[])[2]
+    );
+    cam.fov = camera.fov as number;
+    cam.updateProjectionMatrix();
+  }, [camera.position, camera.fov]);
 
   return (
     <div className="w-full h-screen">
@@ -43,8 +35,8 @@ export default function Home() {
       
       <Canvas
         shadows
-        dpr={[0.5, 0.8]}
-        camera={{ position: [5, 5, 5], fov: 45, near: 0.1, far: 500 }}
+        dpr={[1.0, 2.0]}
+        camera={{ position: camera.position as [number, number, number], fov: camera.fov as number, near: 0.1, far: 500 }}
         gl={{
           antialias: true,
           toneMapping: THREE.ACESFilmicToneMapping,
@@ -56,13 +48,9 @@ export default function Home() {
         }}
       >
         <Lights />
-        <ModelControls />
-        <OrbitControls 
-          enablePan={true}
-          enableZoom={true}
-          enableRotate={true}
-          makeDefault
-        />
+        <CozyRoom />
+        <PointerLockControls  makeDefault />
+        <Postprocessing />
       </Canvas>
     </div>
   );
