@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { createBlanketMaterial } from "./shaders/createBlanketMaterial";
 import { useDebugUI } from "../hooks/useDebugUI";
+import { createJitterMaterial } from "./shaders/createJitterMaterial";
+import CustomShaderMaterial from "three-custom-shader-material/vanilla";
 
 interface GLBModelProps {
   url: string;
@@ -44,67 +45,33 @@ export function GLBModel({
     }
   });
 
-  // Create blanket shader material once (texture assigned after GLTF loads)
-  const blanketMaterial = useMemo(() => createBlanketMaterial(), []);
+  // Store materials for each mesh
+  const materialsRef = useRef<Map<THREE.Mesh, CustomShaderMaterial>>(new Map());
 
-  // Reactively sync debug UI changes to shader uniforms
+  // Reactively sync debug UI changes to all shader uniforms
   useEffect(() => {
     const colorA = new THREE.Color(blanket.colorA as string);
     const colorB = new THREE.Color(blanket.colorB as string);
-    blanketMaterial.uniforms.uColorA.value.copy(colorA);
-    blanketMaterial.uniforms.uColorB.value.copy(colorB);
-    blanketMaterial.uniforms.uStripeScale.value = blanket.stripeScale as number;
-    blanketMaterial.uniforms.uColorDepth.value = blanket.colorDepth as number;
-    blanketMaterial.uniforms.uDitherScale.value = blanket.ditherScale as number;
-  }, [blanket.colorA, blanket.colorB, blanket.stripeScale, blanket.colorDepth, blanket.ditherScale, blanketMaterial]);
-  const objects = useMemo(() => [
-    // "rightleg",
-    // "shelf001",
-    // "pumpkin",
-    "blanket",
-    // "window",
-    // "floor",
-    // "walls",
-    // "wall",
-    // "wall001",
-    // "pillow",
-    // "pillow001",
-    // "pillow002",
-    // "vase001",
-    // "BezierCurve001",
-    // "leaf030",
-    // "BezierCurve002",
-    // "leaf002",
-    // "BezierCurve004",
-    // "leaf003",
-    // "BezierCurve005",
-    // "BezierCurve006",
-    // "BezierCurve007",
-    // "BezierCurve008",
-    // "BezierCurve009",
-    // "BezierCurve",
-    // "vase",
-    // "BezierCurve003",
-    // "leaf001",
-    // "table",
-    // "tablelegs",
-  ], []);
+    
+    materialsRef.current.forEach((material) => {
+      material.uniforms.uColorA.value.copy(colorA);
+      material.uniforms.uColorB.value.copy(colorB);
+      material.uniforms.uStripeScale.value = blanket.stripeScale as number;
+      material.uniforms.uColorDepth.value = blanket.colorDepth as number;
+      material.uniforms.uDitherScale.value = blanket.ditherScale as number;
+    });
+  }, [blanket.colorA, blanket.colorB, blanket.stripeScale, blanket.colorDepth, blanket.ditherScale]);
 
   useEffect(() => {
     if (!scene) return;
 
-    const lowerIncludes = (name?: string) =>
-      objects.includes((name || "").toLowerCase());
-
     scene.traverse((obj) => {
-      console.log("obj:", obj.name);
-      if ((obj as THREE.Mesh).isMesh && lowerIncludes(obj.name)) {
+      if ((obj as THREE.Mesh).isMesh) {
         const mesh = obj as THREE.Mesh;
         const originalMat = mesh.material as
           | MaterialWithMap
           | MaterialWithMap[];
 
-        // Support multi-material meshes by picking the first with a map
         let originalTexture: THREE.Texture | null = null;
         if (Array.isArray(originalMat)) {
           for (const m of originalMat) {
@@ -118,14 +85,19 @@ export function GLBModel({
         }
 
         if (originalTexture) {
-          blanketMaterial.uniforms.map.value = originalTexture;
+          const jitterMaterial = createJitterMaterial({
+            map: originalTexture,
+            colorDepth: blanket.colorDepth as number,
+            ditherScale: blanket.ditherScale as number,
+          });
+          
+          materialsRef.current.set(mesh, jitterMaterial);
+          mesh.material = jitterMaterial;
+          (mesh.material as THREE.Material).needsUpdate = true;
         }
-
-        mesh.material = blanketMaterial;
-        (mesh.material as THREE.Material).needsUpdate = true;
       }
     });
-  }, [scene, blanketMaterial, objects]);
+  }, [scene, blanket.colorDepth, blanket.ditherScale]);
 
   return (
     <group ref={modelRef} position={position} scale={scale} rotation={rotation}>

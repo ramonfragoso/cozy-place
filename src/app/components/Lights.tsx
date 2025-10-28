@@ -21,26 +21,37 @@ export function Lights() {
   const pointLightRef = useRef<THREE.PointLight>(null!);
 
   // Add helpers for directional and point lights
-  useHelper(showHelpers ? directionalLightRef : null, THREE.DirectionalLightHelper, 1, directionalColor);
-  useHelper(showHelpers ? pointLightRef : null, THREE.PointLightHelper, 0.5, pointColor);
+  useHelper(
+    showHelpers ? directionalLightRef : null,
+    THREE.DirectionalLightHelper,
+    1,
+    directionalColor
+  );
+  useHelper(
+    showHelpers ? pointLightRef : null,
+    THREE.PointLightHelper,
+    0.5,
+    pointColor
+  );
 
   return (
     <>
       <ambientLight intensity={ambientIntensity} />
-      
-      <directionalLight 
+
+      <directionalLight
         ref={directionalLightRef}
-        position={directionalPosition as [number, number, number]} 
+        position={directionalPosition as [number, number, number]}
         intensity={directionalIntensity}
         color={directionalColor}
         castShadow
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
       />
-      
-      <pointLight 
+
+      <pointLight
+        castShadow
         ref={pointLightRef}
-        position={pointPosition as [number, number, number]} 
+        position={pointPosition as [number, number, number]}
         intensity={pointIntensity}
         color={pointColor}
       />

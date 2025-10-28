@@ -1,17 +1,19 @@
 "use client";
 import * as THREE from "three";
-import vert from "./blanket.vert";
-import frag from "./blanket.frag";
+import vert from "./jitter.vert";
+import frag from "./jitter.frag";
+import CustomShaderMaterial from "three-custom-shader-material/vanilla";
 
-export function createBlanketMaterial(params?: {
+export function createJitterMaterial(params?: {
   colorA?: THREE.ColorRepresentation;
   colorB?: THREE.ColorRepresentation;
   stripeScale?: number;
   map?: THREE.Texture;
   colorDepth?: number;
   ditherScale?: number;
-}): THREE.ShaderMaterial {
-  const material = new THREE.ShaderMaterial({
+}): CustomShaderMaterial {
+  const material = new CustomShaderMaterial({
+    baseMaterial: THREE.MeshPhysicalMaterial,
     vertexShader: vert,
     fragmentShader: frag,
     uniforms: {
@@ -24,12 +26,10 @@ export function createBlanketMaterial(params?: {
     },
   });
 
-  material.name = "BlanketShaderMaterial";
+  material.name = "JitterShaderMaterial";
   material.transparent = false;
   material.depthWrite = true;
   material.depthTest = true;
 
   return material;
 }
-
-
