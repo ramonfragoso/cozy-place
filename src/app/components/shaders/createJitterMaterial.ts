@@ -13,7 +13,7 @@ export function createJitterMaterial(params?: {
   ditherScale?: number;
 }): CustomShaderMaterial {
   const material = new CustomShaderMaterial({
-    baseMaterial: THREE.MeshPhysicalMaterial,
+    baseMaterial: THREE.MeshPhongMaterial,
     vertexShader: vert,
     fragmentShader: frag,
     uniforms: {

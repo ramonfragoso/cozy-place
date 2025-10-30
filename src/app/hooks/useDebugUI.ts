@@ -9,6 +9,9 @@ export const useDebugUI = () => {
     pointIntensity: { value: 8, min: 0, max: 20, step: 0.1 },
     pointPosition: { value: [-3.38, 3.25, 0.69], step: 0.01 },
     pointColor: "#ef0707",
+    pointLight2Intensity: { value: 650, min: 0, max: 3000, step: 0.1 },
+    pointLight2Position: { value: [0, 5, 0], step: 0.1 },
+    pointLight2Color: "#1fc72a",
     showHelpers: true,
   });
 
@@ -34,9 +37,30 @@ export const useDebugUI = () => {
     ditherScale: { value: 0.2, min: 0.1, max: 32, step: 0.1 },
   });
 
+  const environmentControls = useControls("Environment", {
+    enabled: true,
+    background: true,
+    rotation: { value: [0,5.23,0], step: 0.01 },
+    blur: { value: 0, min: 0, max: 1, step: 0.01 },
+    intensity: { value: 1, min: 0, max: 5, step: 0.05 },
+  });
+
   const cameraControls = useControls("Camera", {
     position: { value: [-0.4, 2.3, -1.4], min: -10, max: 10, step: 0.1 },
     fov: { value: 80, min: 0, max: 100, step: 0.1 },
+  });
+
+  const glassControls = useControls("Glass", {
+    metalness: { value: 0.96, min: 0, max: 1, step: 0.01 },
+    roughness: { value: 0.02, min: 0, max: 1, step: 0.01 },
+    envMapIntensity: { value: 2.75, min: 0, max: 5, step: 0.01 },
+    clearcoat: { value: 1, min: 0, max: 1, step: 0.01 },
+    transparent: true,
+    transmission: { value: 0.17, min: 0, max: 1, step: 0.01 },
+    thickness: { value: 0.15, min: 0, max: 2, step: 0.01 },
+    opacity: { value: 0.24, min: 0, max: 1, step: 0.01 },
+    ior: { value: 2.5, min: 0.5, max: 2.5, step: 0.01 },
+    side: { value: "BackSide", options: ["FrontSide", "BackSide", "DoubleSide"] },
   });
 
   return {
@@ -44,6 +68,8 @@ export const useDebugUI = () => {
     model: modelControls,
     blanket: blanketControls,
     postprocessing: postprocessingControls,
+    environment: environmentControls,
+    glass: glassControls,
     camera: cameraControls,
   };
 };

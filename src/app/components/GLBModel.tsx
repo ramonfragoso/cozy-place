@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
 import { useDebugUI } from "../hooks/useDebugUI";
 import { createJitterMaterial } from "./shaders/createJitterMaterial";
 import CustomShaderMaterial from "three-custom-shader-material/vanilla";
@@ -26,6 +27,17 @@ type MaterialWithMap =
   | (THREE.MeshMatcapMaterial & { map?: THREE.Texture | null })
   | (THREE.Material & { map?: THREE.Texture | null });
 
+type EmissiveMaterial =
+  | THREE.MeshStandardMaterial
+  | THREE.MeshPhysicalMaterial
+  | THREE.MeshPhongMaterial
+  | THREE.MeshLambertMaterial
+  | THREE.MeshToonMaterial;
+
+const isEmissiveMaterial = (m: THREE.Material): m is EmissiveMaterial => {
+  return (m as unknown as { emissive?: unknown }).emissive !== undefined;
+};
+
 export function GLBModel({
   url,
   position = [0, 0, 0],
@@ -34,14 +46,19 @@ export function GLBModel({
   autoRotate = false,
   rotationSpeed = 0.01,
 }: GLBModelProps) {
-  const { scene } = useGLTF(url);
+  const { scene, animations } = useGLTF(url);
   const modelRef = useRef<THREE.Group>(null);
-  const { blanket } = useDebugUI();
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const screenLightRef = useRef<THREE.RectAreaLight | null>(null);
+  const { blanket, glass } = useDebugUI();
 
   // Auto-rotate animation
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (modelRef.current && autoRotate) {
       modelRef.current.rotation.y += rotationSpeed;
+    }
+    if (mixerRef.current) {
+      mixerRef.current.update(delta);
     }
   });
 
@@ -68,6 +85,13 @@ export function GLBModel({
     scene.traverse((obj) => {
       if ((obj as THREE.Mesh).isMesh) {
         const mesh = obj as THREE.Mesh;
+        // Ensure all meshes cast and receive shadows
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        // Skip shader replacement for the monitor screen so it can remain emissive-friendly
+        if (obj.name === "monitor screen") {
+          return;
+        }
         const originalMat = mesh.material as
           | MaterialWithMap
           | MaterialWithMap[];
@@ -98,6 +122,156 @@ export function GLBModel({
       }
     });
   }, [scene, blanket.colorDepth, blanket.ditherScale]);
+
+  // Make the object named "monitor screen" emit light using a RectAreaLight
+  useEffect(() => {
+    if (!scene) return;
+    RectAreaLightUniformsLib.init();
+
+    const screensNames = ["monitorscreen", "fanbulb", "tvscreen"]
+    const screens = screensNames.map((screenName) => scene.getObjectByName(screenName) as THREE.Mesh | null);
+    if (!screen || !!!screens.length) return;
+
+    // Try to make the screen surface itself emissive (if supported by its material)
+    const setEmissive = (m: THREE.Material) => {
+      if (isEmissiveMaterial(m)) {
+        m.emissive.set(0xffffff);
+        if (typeof (m as { emissiveIntensity?: number }).emissiveIntensity === "number") {
+          (m as { emissiveIntensity?: number }).emissiveIntensity = 1.5;
+        }
+        m.needsUpdate = true;
+      }
+    };
+
+    screens.forEach(screen => {
+      const screenMaterial = screen?.material as THREE.Material | THREE.Material[];
+      if (Array.isArray(screenMaterial)) {
+        screenMaterial.forEach(setEmissive);
+      } else if (screenMaterial) {
+        setEmissive(screenMaterial);
+      }
+      
+      const geometry = (screen?.geometry as THREE.BufferGeometry) || null;
+      let width = 0.5;
+      let height = 0.3;
+      if (geometry) {
+        if (!geometry.boundingBox) geometry.computeBoundingBox();
+        if (geometry.boundingBox) {
+          const size = new THREE.Vector3();
+          geometry.boundingBox.getSize(size);
+          width = Math.max(0.01, size.x);
+          height = Math.max(0.01, size.y);
+        }
+      }
+      
+      const rectLight = new THREE.RectAreaLight(0xffffff, 15, width, height);
+      rectLight.name = `${screen?.name}-screen-light`;
+      rectLight.position.set(0, 0, 0.01);
+      rectLight.lookAt(0, 0, 1);
+      
+      screen?.add(rectLight);
+      screenLightRef.current = rectLight;
+    })
+      
+    return () => {
+      if (screenLightRef.current && screenLightRef.current.parent) {
+        screenLightRef.current.parent.remove(screenLightRef.current);
+      }
+      screenLightRef.current = null;
+    };
+  }, [scene]);
+
+  // Assign custom glass-like material to the object named "window"
+  useEffect(() => {
+    if (!scene) return;
+
+    const windowObj = scene.getObjectByName("window") as THREE.Mesh | null;
+    if (!windowObj) return;
+
+    const glassMaterial = new THREE.MeshPhysicalMaterial({
+      metalness: glass.metalness as number,
+      roughness: glass.roughness as number,
+      envMapIntensity: glass.envMapIntensity as number,
+      clearcoat: glass.clearcoat as number,
+      transparent: glass.transparent as boolean,
+      transmission: glass.transmission as number,
+      thickness: glass.thickness as number,
+      opacity: glass.opacity as number,
+      ior: glass.ior as number,
+      side:
+        (THREE as unknown as { FrontSide: number; BackSide: number; DoubleSide: number })[
+          glass.side as "FrontSide" | "BackSide" | "DoubleSide"
+        ] ?? THREE.BackSide,
+    } as unknown as THREE.MeshPhysicalMaterialParameters);
+
+    windowObj.material = glassMaterial;
+    (windowObj.material as THREE.Material).needsUpdate = true;
+  }, [
+    scene,
+    glass.metalness,
+    glass.roughness,
+    glass.envMapIntensity,
+    glass.clearcoat,
+    glass.transparent,
+    glass.transmission,
+    glass.thickness,
+    glass.opacity,
+    glass.ior,
+    glass.side,
+  ]);
+
+  // Reactively update glass material from debug UI
+  useEffect(() => {
+    if (!scene) return;
+    const windowObj = scene.getObjectByName("window") as THREE.Mesh | null;
+    if (!windowObj) return;
+    const mat = windowObj.material as THREE.MeshPhysicalMaterial | undefined;
+    if (!mat) return;
+    mat.metalness = glass.metalness as number;
+    mat.roughness = glass.roughness as number;
+    mat.envMapIntensity = glass.envMapIntensity as number;
+    mat.clearcoat = glass.clearcoat as number;
+    mat.transparent = glass.transparent as boolean;
+    if (typeof mat.transmission === "number") mat.transmission = glass.transmission as number;
+    if (typeof mat.thickness === "number") mat.thickness = glass.thickness as number;
+    mat.opacity = glass.opacity as number;
+    if (typeof mat.ior === "number") mat.ior = glass.ior as number;
+    const sideValue = (THREE as unknown as { FrontSide: number; BackSide: number; DoubleSide: number })[
+      glass.side as "FrontSide" | "BackSide" | "DoubleSide"
+    ];
+    if (typeof sideValue === "number") mat.side = sideValue as THREE.Side;
+    mat.needsUpdate = true;
+  }, [scene, glass.metalness, glass.roughness, glass.envMapIntensity, glass.clearcoat, glass.transparent, glass.transmission, glass.thickness, glass.opacity, glass.ior, glass.side]);
+
+  useEffect(() => {
+    if (!scene || !animations || animations.length === 0) return;
+    const fanObject = scene.getObjectByName("fan");
+    if (!fanObject) return;
+
+    // Gather all tracks that target the fan node
+    const fanTracks: THREE.KeyframeTrack[] = [];
+    for (const clip of animations) {
+      for (const track of clip.tracks) {
+        if (track.name.startsWith("fan.")) {
+          fanTracks.push(track);
+        }
+      }
+    }
+
+    if (fanTracks.length === 0) return;
+
+    mixerRef.current = new THREE.AnimationMixer(fanObject);
+    const fanClip = new THREE.AnimationClip("fanOnly", -1, fanTracks);
+    const action = mixerRef.current.clipAction(fanClip);
+    action.play();
+
+    return () => {
+      if (mixerRef.current) {
+        mixerRef.current.stopAllAction();
+        mixerRef.current = null;
+      }
+    };
+  }, [scene, animations]);
 
   return (
     <group ref={modelRef} position={position} scale={scale} rotation={rotation}>

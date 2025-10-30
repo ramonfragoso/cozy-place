@@ -1,6 +1,6 @@
 "use client";
 import { Canvas } from "@react-three/fiber";
-import { PointerLockControls } from "@react-three/drei";
+import { PointerLockControls, Environment } from "@react-three/drei";
 import * as THREE from "three";
 import { useEffect, useRef } from "react";
 import { useDebugUI } from "./hooks/useDebugUI";
@@ -13,7 +13,7 @@ import { Postprocessing } from "./components/Postprocessing";
 
 export default function Home() {
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const { camera } = useDebugUI();
+  const { camera, environment } = useDebugUI();
 
   useEffect(() => {
     const cam = cameraRef.current;
@@ -35,7 +35,8 @@ export default function Home() {
       
       <Canvas
         shadows
-        dpr={[1.0, 2.0]}
+        dpr={[0.8, 0.8]}
+
         camera={{ position: camera.position as [number, number, number], fov: camera.fov as number, near: 0.1, far: 500 }}
         gl={{
           antialias: true,
@@ -47,6 +48,16 @@ export default function Home() {
           cameraRef.current = camera as THREE.PerspectiveCamera;
         }}
       >
+        {environment.enabled && (
+          <Environment
+            files="/hdr_high.hdr"
+            background={environment.background as boolean}
+            blur={environment.blur as number}
+            backgroundRotation={environment.rotation}
+            environmentRotation={environment.rotation}
+          />
+        )}
+        {/* Sync environment/background intensity, rotation and blur with the scene when supported */}
         <Lights />
         <CozyRoom />
         <PointerLockControls  makeDefault />
