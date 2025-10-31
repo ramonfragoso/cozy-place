@@ -9,8 +9,6 @@ import { Lights } from "./components/Lights";
 import { Postprocessing } from "./components/Postprocessing";
 import { Leva } from "leva";
 
-
-
 export default function Home() {
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const { camera, environment } = useDebugUI();
@@ -33,48 +31,68 @@ export default function Home() {
       {isLoading && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-4">
-            <p className="text-white text-lg font-medium font-mono animate-pulse">loading</p>
+            <p className="text-white text-lg font-medium font-mono animate-pulse">
+              loading
+            </p>
           </div>
         </div>
       )}
-      <div className="z-50 absolute max-h-[100vh] overflow-auto top-1 right-1 rounded-md max-w-[370px] "> 
-        <Leva hidden  fill />
+      <div className="z-50 absolute max-h-[100vh] overflow-auto top-1 right-1 rounded-md max-w-[370px] ">
+        <Leva hidden fill />
       </div>
-      
+
       {/* Scroll to zoom indicator */}
-      <div className="fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-sm rounded-lg border border-white/20">
-        <svg 
-          className="w-5 h-5 text-white animate-pulse" 
-          fill="none" 
-          stroke="currentColor" 
-          viewBox="0 0 24 24"
-        >
-          {/* Mouse shape */}
-          <rect x="6" y="2" width="12" height="20" rx="3" stroke="currentColor" strokeWidth={2} />
-          {/* Scroll wheel indicator */}
-          <path 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
-            strokeWidth={2} 
+      <div className="fixed bottom-4 right-4 z-50 flex gap-2">
+        <div className="flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-sm rounded-lg border border-white/20">
+          <svg
+            className="w-5 h-5 text-white animate-pulse"
+            fill="none"
             stroke="currentColor"
-            d="M12 5v3M12 11v3" 
-          />
-        </svg>
-        <span className="text-white text-sm font-mono animate-pulse">scroll to zoom in/out</span>
+            viewBox="0 0 24 24"
+          >
+            {/* Mouse shape */}
+            <rect
+              x="6"
+              y="2"
+              width="12"
+              height="20"
+              rx="3"
+              stroke="currentColor"
+              strokeWidth={2}
+            />
+            {/* Scroll wheel indicator */}
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              stroke="currentColor"
+              d="M12 5v3M12 11v3"
+            />
+          </svg>
+          <span className="text-white text-sm font-mono animate-pulse">
+            scroll to zoom in/out
+          </span>
+        </div>
+        <div className="flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-sm rounded-lg border border-white/20">
+          <span className="text-white text-sm font-mono animate-pulse">press ESC to unlock the mouse cursor</span>
+        </div>
       </div>
-      
-     <Canvas
+      <Canvas
         shadows
         dpr={[0.6, 0.7]}
-
-        camera={{ position: camera.position as [number, number, number], fov: camera.fov as number, near: 0.1, far: 500 }}
+        camera={{
+          position: camera.position as [number, number, number],
+          fov: camera.fov as number,
+          near: 0.1,
+          far: 500,
+        }}
         gl={{
           // antialias: true,
           toneMapping: THREE.ACESFilmicToneMapping,
           outputColorSpace: THREE.SRGBColorSpace,
         }}
         onCreated={({ camera }) => {
-          camera.lookAt(-4, 1,-1);
+          camera.lookAt(-4, 1, -1);
           cameraRef.current = camera as THREE.PerspectiveCamera;
         }}
       >
@@ -94,18 +112,18 @@ export default function Home() {
           <CozyRoom onLoad={() => setIsLoading(false)} />
         </Suspense>
         {/* <OrbitControls/> */}
-        <PointerLockControls  makeDefault />
+        <PointerLockControls makeDefault />
         <Postprocessing />
       </Canvas>
     </div>
   );
 }
 
-const ZOOM_LEVELS = [1.2, 0.5, 0.2]; 
+const ZOOM_LEVELS = [1.2, 0.5, 0.2];
 
 function WheelZoom({ baseFov }: { baseFov: number }) {
   const { camera } = useThree();
-  const [zoomLevel, setZoomLevel] = useState(0); 
+  const [zoomLevel, setZoomLevel] = useState(0);
   const baseFovRef = useRef(baseFov);
   const targetFovRef = useRef(baseFov * ZOOM_LEVELS[0]);
 
