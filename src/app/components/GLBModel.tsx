@@ -171,6 +171,7 @@ export function GLBModel({
       rectLight.name = `${screen?.name}-screen-light`;
       rectLight.position.set(0, 0, 0.01);
       rectLight.lookAt(0, 0, 1);
+      // initial settings left at defaults; reactive effect will sync values
       
       screen?.add(rectLight);
       screenLightRef.current = rectLight;
@@ -198,7 +199,7 @@ export function GLBModel({
     };
   }, [scene]);
 
-  // Reactively update emissive intensities, colors and screen rect lights from debug UI
+  // Reactively update emissive intensities and screen rect lights from debug UI
   useEffect(() => {
     if (!scene) return;
 
@@ -227,21 +228,25 @@ export function GLBModel({
       const rectLight = screen.getObjectByName(`${screen.name}-screen-light`) as THREE.RectAreaLight | null;
       if (rectLight) {
         if (screen.name === "monitorscreen") {
-          rectLight.intensity = emissive.monitorIntensity as number;
+          rectLight.intensity = (emissive.monitorIntensity as number) ?? (emissive.rectLightIntensity as number);
           rectLight.color = new THREE.Color(emissive.monitorColor as string);
           const [rx, ry, rz] = emissive.monitorRotation as unknown as [number, number, number];
           rectLight.rotation.set(rx, ry, rz);
+          const [px, py, pz] = emissive.monitorPosition as unknown as [number, number, number];
+          rectLight.position.set(px, py, pz);
         } else if (screen.name === "tvscreen") {
-          rectLight.intensity = emissive.tvIntensity as number;
+          rectLight.intensity = (emissive.tvIntensity as number) ?? (emissive.rectLightIntensity as number);
           rectLight.color = new THREE.Color(emissive.tvColor as string);
           const [rx, ry, rz] = emissive.tvRotation as unknown as [number, number, number];
           rectLight.rotation.set(rx, ry, rz);
+          const [px, py, pz] = emissive.tvPosition as unknown as [number, number, number];
+          rectLight.position.set(px, py, pz);
         } else {
           rectLight.intensity = emissive.rectLightIntensity as number;
         }
       }
     });
-  }, [scene, emissive.intensity, emissive.rectLightIntensity, emissive.monitorIntensity, emissive.monitorColor, emissive.monitorRotation, emissive.tvIntensity, emissive.tvColor, emissive.tvRotation]);
+  }, [scene, emissive.intensity, emissive.rectLightIntensity, emissive.monitorIntensity, emissive.monitorColor, emissive.monitorRotation, emissive.monitorPosition, emissive.tvIntensity, emissive.tvColor, emissive.tvRotation, emissive.tvPosition]);
 
   // Toggle helpers for the emissive RectAreaLights
   useEffect(() => {

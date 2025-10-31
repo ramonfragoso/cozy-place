@@ -53,12 +53,14 @@ export const useDebugUI = () => {
   const emissiveControls = useControls("Emissive", {
     intensity: { value: 0.01, min: 0, max: 1, step: 0.001 },
     rectLightIntensity: { value: 15, min: 0, max: 1000, step: 0.5 },
-    monitorColor: "#ffffff",
     monitorIntensity: { value: 15, min: 0, max: 1000, step: 0.5 },
-    monitorRotation: { value: [0, 0, 0], min: -3.1416, max: 3.1416, step: 0.01 },
+    monitorColor: "#ffffff",
+    monitorRotation: { value: [0, 0, 0], step: 0.01 },
+    monitorPosition: { value: [0, 0, 0.01], step: 0.01 },
+    tvIntensity: { value: 15, min: 0, max: 2000, step: 0.5 },
     tvColor: "#ffffff",
-    tvIntensity: { value: 15, min: 0, max: 1000, step: 0.5 },
-    tvRotation: { value: [0, 0, 0], min: -3.1416, max: 3.1416, step: 0.01 },
+    tvRotation: { value: [0, 0, 0], step: 0.01 },
+    tvPosition: { value: [0, 0, 0.01], step: 0.01 },
   });
 
   const glassControls = useControls("Glass", {
