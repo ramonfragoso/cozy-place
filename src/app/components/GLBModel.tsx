@@ -16,6 +16,7 @@ interface GLBModelProps {
   rotation?: [number, number, number];
   autoRotate?: boolean;
   rotationSpeed?: number;
+  onLoad?: () => void;
 }
 
 type MaterialWithMap =
@@ -46,6 +47,7 @@ export function GLBModel({
   rotation = [0, 0, 0],
   autoRotate = false,
   rotationSpeed = 0.01,
+  onLoad,
 }: GLBModelProps) {
   const { scene, animations } = useGLTF(url);
   const modelRef = useRef<THREE.Group>(null);
@@ -54,6 +56,7 @@ export function GLBModel({
   const screenLightRefs = useRef<THREE.RectAreaLight[]>([]);
   const screenLightHelperRefs = useRef<RectAreaLightHelper[]>([]);
   const { blanket, glass, emissive, lighting, surfaces } = useDebugUI();
+  const hasCalledOnLoad = useRef(false);
 
   // Auto-rotate animation
   useFrame((_, delta) => {
@@ -67,6 +70,11 @@ export function GLBModel({
 
   // Store materials for each mesh
   const materialsRef = useRef<Map<THREE.Mesh, CustomShaderMaterial>>(new Map());
+
+  // Reset onLoad tracking when callback changes
+  useEffect(() => {
+    hasCalledOnLoad.current = false;
+  }, [onLoad]);
 
   // Single orchestrated effect
   useEffect(() => {
@@ -323,6 +331,12 @@ export function GLBModel({
     updateWindowGlass();
     const cleanupFan = ensureFanAnimation();
 
+    // Call onLoad callback once when scene is fully processed
+    if (onLoad && !hasCalledOnLoad.current) {
+      hasCalledOnLoad.current = true;
+      onLoad();
+    }
+
     return () => {
       if (cleanupLights) cleanupLights();
       if (cleanupFan) cleanupFan();
@@ -368,6 +382,7 @@ export function GLBModel({
     glass.opacity,
     glass.ior,
     glass.side,
+    onLoad,
   ]);
 
   return (

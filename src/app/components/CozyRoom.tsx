@@ -2,7 +2,11 @@
 import { GLBModel } from "./GLBModel";
 import { useDebugUI } from "../hooks/useDebugUI";
 
-export function CozyRoom() {
+interface CozyRoomProps {
+  onLoad?: () => void;
+}
+
+export function CozyRoom({ onLoad }: CozyRoomProps) {
   const { model } = useDebugUI();
   const {
     position,
@@ -20,6 +24,7 @@ export function CozyRoom() {
       rotation={rotation as [number, number, number]}
       autoRotate={autoRotate}
       rotationSpeed={rotationSpeed}
+      onLoad={onLoad}
     />
   );
 }
