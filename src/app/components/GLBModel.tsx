@@ -53,7 +53,7 @@ export function GLBModel({
   const screenLightRef = useRef<THREE.RectAreaLight | null>(null);
   const screenLightRefs = useRef<THREE.RectAreaLight[]>([]);
   const screenLightHelperRefs = useRef<RectAreaLightHelper[]>([]);
-  const { blanket, glass, emissive, lighting } = useDebugUI();
+  const { blanket, glass, emissive, lighting, surfaces } = useDebugUI();
 
   // Auto-rotate animation
   useFrame((_, delta) => {
@@ -68,165 +68,148 @@ export function GLBModel({
   // Store materials for each mesh
   const materialsRef = useRef<Map<THREE.Mesh, CustomShaderMaterial>>(new Map());
 
-  // Reactively sync debug UI changes to all shader uniforms
-  useEffect(() => {
-    const colorA = new THREE.Color(blanket.colorA as string);
-    const colorB = new THREE.Color(blanket.colorB as string);
-    
-    materialsRef.current.forEach((material) => {
-      material.uniforms.uColorA.value.copy(colorA);
-      material.uniforms.uColorB.value.copy(colorB);
-      material.uniforms.uStripeScale.value = blanket.stripeScale as number;
-      material.uniforms.uColorDepth.value = blanket.colorDepth as number;
-      material.uniforms.uDitherScale.value = blanket.ditherScale as number;
-    });
-  }, [blanket.colorA, blanket.colorB, blanket.stripeScale, blanket.colorDepth, blanket.ditherScale]);
-
+  // Single orchestrated effect
   useEffect(() => {
     if (!scene) return;
 
-    scene.traverse((obj) => {
-      if ((obj as THREE.Mesh).isMesh) {
+    const isSurfaceTarget = (name: string) => {
+      const lower = name.toLowerCase();
+      return lower === "floor" || lower.includes("wall");
+    };
+
+    const syncBlanketUniforms = () => {
+      const colorA = new THREE.Color(blanket.colorA as string);
+      const colorB = new THREE.Color(blanket.colorB as string);
+      materialsRef.current.forEach((material) => {
+        material.uniforms.uColorA.value.copy(colorA);
+        material.uniforms.uColorB.value.copy(colorB);
+        material.uniforms.uStripeScale.value = blanket.stripeScale as number;
+        material.uniforms.uColorDepth.value = blanket.colorDepth as number;
+        material.uniforms.uDitherScale.value = blanket.ditherScale as number;
+      });
+    };
+
+    const ensureJitterMaterials = () => {
+      scene.traverse((obj) => {
+        if (!(obj as THREE.Mesh).isMesh) return;
         const mesh = obj as THREE.Mesh;
-        // Ensure all meshes cast and receive shadows
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        // Skip shader replacement for the monitor screen so it can remain emissive-friendly
-        if (obj.name === "monitor screen") {
-          return;
-        }
-        const originalMat = mesh.material as
-          | MaterialWithMap
-          | MaterialWithMap[];
+        if (obj.name === "monitor screen" || isSurfaceTarget(obj.name)) return;
 
+        const originalMat = mesh.material as MaterialWithMap | MaterialWithMap[];
         let originalTexture: THREE.Texture | null = null;
         if (Array.isArray(originalMat)) {
           for (const m of originalMat) {
-            if (m && m.map) {
-              originalTexture = m.map as THREE.Texture;
-              break;
-            }
+            if (m && m.map) { originalTexture = m.map as THREE.Texture; break; }
           }
         } else if (originalMat && originalMat.map) {
           originalTexture = originalMat.map as THREE.Texture;
         }
+        if (!originalTexture) return;
+        if (materialsRef.current.has(mesh)) return; // already replaced
 
-        if (originalTexture) {
-          const jitterMaterial = createJitterMaterial({
-            map: originalTexture,
-            colorDepth: blanket.colorDepth as number,
-            ditherScale: blanket.ditherScale as number,
-          });
-          
-          materialsRef.current.set(mesh, jitterMaterial);
-          mesh.material = jitterMaterial;
-          (mesh.material as THREE.Material).needsUpdate = true;
-        }
-      }
-    });
-  }, [scene, blanket.colorDepth, blanket.ditherScale]);
-
-  // Make the object named "monitor screen" emit light using a RectAreaLight
-  useEffect(() => {
-    if (!scene) return;
-    RectAreaLightUniformsLib.init();
-
-    const screensNames = ["monitorscreen", "fanbulb", "tvscreen"]
-    const screens = screensNames.map((screenName) => scene.getObjectByName(screenName) as THREE.Mesh | null);
-    if (!screen || !!!screens.length) return;
-
-    // Try to make the screen surface itself emissive (if supported by its material)
-    const setEmissive = (m: THREE.Material) => {
-      if (isEmissiveMaterial(m)) {
-        m.emissive.set(0xffffff);
-        if (typeof (m as { emissiveIntensity?: number }).emissiveIntensity === "number") {
-          (m as { emissiveIntensity?: number }).emissiveIntensity = 1.5;
-        }
-        m.needsUpdate = true;
-      }
+        const jitterMaterial = createJitterMaterial({
+          map: originalTexture,
+          colorDepth: blanket.colorDepth as number,
+          ditherScale: blanket.ditherScale as number,
+        });
+        materialsRef.current.set(mesh, jitterMaterial);
+        mesh.material = jitterMaterial;
+        (mesh.material as THREE.Material).needsUpdate = true;
+      });
     };
 
-    screens.forEach(screen => {
-      const screenMaterial = screen?.material as THREE.Material | THREE.Material[];
-      if (Array.isArray(screenMaterial)) {
-        screenMaterial.forEach(setEmissive);
-      } else if (screenMaterial) {
-        setEmissive(screenMaterial);
-      }
-      
-      const geometry = (screen?.geometry as THREE.BufferGeometry) || null;
-      let width = 0.5;
-      let height = 0.3;
-      if (geometry) {
-        if (!geometry.boundingBox) geometry.computeBoundingBox();
-        if (geometry.boundingBox) {
-          const size = new THREE.Vector3();
-          geometry.boundingBox.getSize(size);
-          width = Math.max(0.01, size.x);
-          height = Math.max(0.01, size.y);
-        }
-      }
-      
-      const rectLight = new THREE.RectAreaLight(0xffffff, 15, width, height);
-      rectLight.name = `${screen?.name}-screen-light`;
-      rectLight.position.set(0, 0, 0.01);
-      rectLight.lookAt(0, 0, 1);
-      // initial settings left at defaults; reactive effect will sync values
-      
-      screen?.add(rectLight);
-      screenLightRef.current = rectLight;
-      screenLightRefs.current.push(rectLight);
-
-      // helpers are added by a separate effect reacting to the UI flag
-    })
-      
-    return () => {
-      // remove helpers first
-      for (const helper of screenLightHelperRefs.current) {
-        if (helper.parent) helper.parent.remove(helper);
-      }
-      screenLightHelperRefs.current = [];
-
-      // then remove lights
-      if (screenLightRef.current && screenLightRef.current.parent) {
-        screenLightRef.current.parent.remove(screenLightRef.current);
-      }
-      screenLightRef.current = null;
-      for (const light of screenLightRefs.current) {
-        if (light.parent) light.parent.remove(light);
-      }
-      screenLightRefs.current = [];
+    const updateSurfacePBR = () => {
+      scene.traverse((obj) => {
+        if (!(obj as THREE.Mesh).isMesh) return;
+        if (!isSurfaceTarget(obj.name)) return;
+        const applyToMat = (m: THREE.Material) => {
+          const maybeMetal = m as unknown as { metalness?: number };
+          const maybeRough = m as unknown as { roughness?: number };
+          let updated = false;
+          if (typeof maybeMetal.metalness === "number") { maybeMetal.metalness = surfaces.metalness as number; updated = true; }
+          if (typeof maybeRough.roughness === "number") { maybeRough.roughness = surfaces.roughness as number; updated = true; }
+          if (updated) m.needsUpdate = true;
+        };
+        const mat = (obj as THREE.Mesh).material;
+        if (Array.isArray(mat)) mat.forEach((m) => m && applyToMat(m)); else if (mat) applyToMat(mat as THREE.Material);
+      });
     };
-  }, [scene]);
 
-  // Reactively update emissive intensities and screen rect lights from debug UI
-  useEffect(() => {
-    if (!scene) return;
+    const ensureScreenRectLights = () => {
+      RectAreaLightUniformsLib.init();
+      const screensNames = ["monitorscreen", "fanbulb", "tvscreen"];
+      const screens = screensNames.map((screenName) => scene.getObjectByName(screenName) as THREE.Mesh | null);
+      if (!screens.length) return () => {};
+      const createdLights: THREE.RectAreaLight[] = [];
 
-    const screensNames = ["monitorscreen", "fanbulb", "tvscreen"];
-    const screens = screensNames.map((screenName) => scene.getObjectByName(screenName) as THREE.Mesh | null);
-    if (!screens.length) return;
-
-    const setEmissiveIntensity = (m: THREE.Material) => {
-      if (isEmissiveMaterial(m)) {
-        if (typeof (m as { emissiveIntensity?: number }).emissiveIntensity === "number") {
-          (m as { emissiveIntensity?: number }).emissiveIntensity = emissive.intensity as number;
+      const setEmissive = (m: THREE.Material) => {
+        if (isEmissiveMaterial(m)) {
+          m.emissive.set(0xffffff);
+          if (typeof (m as { emissiveIntensity?: number }).emissiveIntensity === "number") {
+            (m as { emissiveIntensity?: number }).emissiveIntensity = 1.5;
+          }
           m.needsUpdate = true;
         }
-      }
+      };
+
+      screens.forEach((screen) => {
+        if (!screen) return;
+        const screenMaterial = screen.material as THREE.Material | THREE.Material[];
+        if (Array.isArray(screenMaterial)) screenMaterial.forEach(setEmissive); else if (screenMaterial) setEmissive(screenMaterial);
+
+        const lightName = `${screen.name}-screen-light`;
+        const existing = screen.getObjectByName(lightName) as THREE.RectAreaLight | null;
+        if (existing) return;
+
+        const rectLight = new THREE.RectAreaLight(0xffffff, 15, 1, 1);
+        rectLight.name = lightName;
+        rectLight.position.copy(screen.position);
+        const worldPos = new THREE.Vector3();
+        const worldDir = new THREE.Vector3();
+        screen.getWorldPosition(worldPos);
+        screen.getWorldDirection(worldDir);
+        rectLight.lookAt(worldPos.clone().add(worldDir));
+        screen.add(rectLight);
+        screenLightRef.current = rectLight;
+        screenLightRefs.current.push(rectLight);
+        createdLights.push(rectLight);
+      });
+
+      return () => {
+        for (const helper of screenLightHelperRefs.current) {
+          if (helper.parent) helper.parent.remove(helper);
+        }
+        screenLightHelperRefs.current = [];
+        for (const light of createdLights) {
+          if (light.parent) light.parent.remove(light);
+        }
+        screenLightRefs.current = screenLightRefs.current.filter((l) => !createdLights.includes(l));
+        if (screenLightRef.current && createdLights.includes(screenLightRef.current)) {
+          screenLightRef.current = null;
+        }
+      };
     };
 
-    screens.forEach((screen) => {
-      if (!screen) return;
-      const screenMaterial = screen.material as THREE.Material | THREE.Material[];
-      if (Array.isArray(screenMaterial)) {
-        screenMaterial.forEach(setEmissiveIntensity);
-      } else if (screenMaterial) {
-        setEmissiveIntensity(screenMaterial);
-      }
-
-      const rectLight = screen.getObjectByName(`${screen.name}-screen-light`) as THREE.RectAreaLight | null;
-      if (rectLight) {
+    const syncEmissiveAndRectLights = () => {
+      const screensNames = ["monitorscreen", "fanbulb", "tvscreen"];
+      const screens = screensNames.map((screenName) => scene.getObjectByName(screenName) as THREE.Mesh | null);
+      if (!screens.length) return;
+      const setEmissiveIntensity = (m: THREE.Material) => {
+        if (isEmissiveMaterial(m)) {
+          if (typeof (m as { emissiveIntensity?: number }).emissiveIntensity === "number") {
+            (m as { emissiveIntensity?: number }).emissiveIntensity = emissive.intensity as number;
+            m.needsUpdate = true;
+          }
+        }
+      };
+      screens.forEach((screen) => {
+        if (!screen) return;
+        const screenMaterial = screen.material as THREE.Material | THREE.Material[];
+        if (Array.isArray(screenMaterial)) screenMaterial.forEach(setEmissiveIntensity); else if (screenMaterial) setEmissiveIntensity(screenMaterial);
+        const rectLight = screen.getObjectByName(`${screen.name}-screen-light`) as THREE.RectAreaLight | null;
+        if (!rectLight) return;
         if (screen.name === "monitorscreen") {
           rectLight.intensity = (emissive.monitorIntensity as number) ?? (emissive.rectLightIntensity as number);
           rectLight.color = new THREE.Color(emissive.monitorColor as string);
@@ -244,54 +227,137 @@ export function GLBModel({
         } else {
           rectLight.intensity = emissive.rectLightIntensity as number;
         }
+      });
+    };
+
+    const toggleHelpers = () => {
+      for (const helper of screenLightHelperRefs.current) {
+        if (helper.parent) helper.parent.remove(helper);
       }
-    });
-  }, [scene, emissive.intensity, emissive.rectLightIntensity, emissive.monitorIntensity, emissive.monitorColor, emissive.monitorRotation, emissive.monitorPosition, emissive.tvIntensity, emissive.tvColor, emissive.tvRotation, emissive.tvPosition]);
+      screenLightHelperRefs.current = [];
+      if (!lighting.showHelpers) return;
+      for (const light of screenLightRefs.current) {
+        const helper = new RectAreaLightHelper(light);
+        screenLightHelperRefs.current.push(helper);
+      }
+    };
 
-  // Toggle helpers for the emissive RectAreaLights
-  useEffect(() => {
-    // remove any existing helpers
-    for (const helper of screenLightHelperRefs.current) {
-      if (helper.parent) helper.parent.remove(helper);
-    }
-    screenLightHelperRefs.current = [];
+    const ensureWindowGlass = () => {
+      const windowObj = scene.getObjectByName("window") as THREE.Mesh | null;
+      if (!windowObj) return;
+      const mat = windowObj.material as THREE.Material | undefined;
+      const needsNew = !(mat instanceof THREE.MeshPhysicalMaterial);
+      if (needsNew) {
+        const glassMaterial = new THREE.MeshPhysicalMaterial({
+          metalness: glass.metalness as number,
+          roughness: glass.roughness as number,
+          envMapIntensity: glass.envMapIntensity as number,
+          clearcoat: glass.clearcoat as number,
+          transparent: glass.transparent as boolean,
+          transmission: glass.transmission as number,
+          thickness: glass.thickness as number,
+          opacity: glass.opacity as number,
+          ior: glass.ior as number,
+          side: (THREE as unknown as { FrontSide: number; BackSide: number; DoubleSide: number })[
+            glass.side as "FrontSide" | "BackSide" | "DoubleSide"
+          ] ?? THREE.BackSide,
+        } as unknown as THREE.MeshPhysicalMaterialParameters);
+        windowObj.material = glassMaterial;
+        (windowObj.material as THREE.Material).needsUpdate = true;
+      }
+    };
 
-    if (!lighting.showHelpers) return;
+    const updateWindowGlass = () => {
+      const windowObj = scene.getObjectByName("window") as THREE.Mesh | null;
+      if (!windowObj) return;
+      const mat = windowObj.material as THREE.MeshPhysicalMaterial | undefined;
+      if (!mat) return;
+      mat.metalness = glass.metalness as number;
+      mat.roughness = glass.roughness as number;
+      mat.envMapIntensity = glass.envMapIntensity as number;
+      mat.clearcoat = glass.clearcoat as number;
+      mat.transparent = glass.transparent as boolean;
+      if (typeof mat.transmission === "number") mat.transmission = glass.transmission as number;
+      if (typeof mat.thickness === "number") mat.thickness = glass.thickness as number;
+      mat.opacity = glass.opacity as number;
+      if (typeof mat.ior === "number") mat.ior = glass.ior as number;
+      const sideValue = (THREE as unknown as { FrontSide: number; BackSide: number; DoubleSide: number })[
+        glass.side as "FrontSide" | "BackSide" | "DoubleSide"
+      ];
+      if (typeof sideValue === "number") mat.side = sideValue as THREE.Side;
+      mat.needsUpdate = true;
+    };
 
-    for (const light of screenLightRefs.current) {
-      const helper = new RectAreaLightHelper(light);
-      light.add(helper);
-      screenLightHelperRefs.current.push(helper);
-    }
-  }, [lighting.showHelpers]);
+    const ensureFanAnimation = () => {
+      if (!animations || animations.length === 0) return () => {};
+      if (mixerRef.current) return () => {};
+      const fanObject = scene.getObjectByName("fan");
+      if (!fanObject) return () => {};
+      const fanTracks: THREE.KeyframeTrack[] = [];
+      for (const clip of animations) {
+        for (const track of clip.tracks) {
+          if (track.name.startsWith("fan.")) fanTracks.push(track);
+        }
+      }
+      if (fanTracks.length === 0) return () => {};
+      mixerRef.current = new THREE.AnimationMixer(fanObject);
+      const fanClip = new THREE.AnimationClip("fanOnly", -1, fanTracks);
+      const action = mixerRef.current.clipAction(fanClip);
+      action.play();
+      return () => {
+        if (mixerRef.current) {
+          mixerRef.current.stopAllAction();
+          mixerRef.current = null;
+        }
+      };
+    };
 
-  // Assign custom glass-like material to the object named "window"
-  useEffect(() => {
-    if (!scene) return;
+    // run orchestrated steps
+    ensureJitterMaterials();
+    syncBlanketUniforms();
+    // updateSurfacePBR();
+    const cleanupLights = ensureScreenRectLights();
+    syncEmissiveAndRectLights();
+    toggleHelpers();
+    ensureWindowGlass();
+    updateWindowGlass();
+    const cleanupFan = ensureFanAnimation();
 
-    const windowObj = scene.getObjectByName("window") as THREE.Mesh | null;
-    if (!windowObj) return;
-
-    const glassMaterial = new THREE.MeshPhysicalMaterial({
-      metalness: glass.metalness as number,
-      roughness: glass.roughness as number,
-      envMapIntensity: glass.envMapIntensity as number,
-      clearcoat: glass.clearcoat as number,
-      transparent: glass.transparent as boolean,
-      transmission: glass.transmission as number,
-      thickness: glass.thickness as number,
-      opacity: glass.opacity as number,
-      ior: glass.ior as number,
-      side:
-        (THREE as unknown as { FrontSide: number; BackSide: number; DoubleSide: number })[
-          glass.side as "FrontSide" | "BackSide" | "DoubleSide"
-        ] ?? THREE.BackSide,
-    } as unknown as THREE.MeshPhysicalMaterialParameters);
-
-    windowObj.material = glassMaterial;
-    (windowObj.material as THREE.Material).needsUpdate = true;
+    return () => {
+      if (cleanupLights) cleanupLights();
+      if (cleanupFan) cleanupFan();
+      // remove helpers on unmount
+      for (const helper of screenLightHelperRefs.current) {
+        if (helper.parent) helper.parent.remove(helper);
+      }
+      screenLightHelperRefs.current = [];
+    };
   }, [
     scene,
+    animations,
+    // blanket
+    blanket.colorA,
+    blanket.colorB,
+    blanket.stripeScale,
+    blanket.colorDepth,
+    blanket.ditherScale,
+    // surfaces
+    surfaces.metalness,
+    surfaces.roughness,
+    // emissive
+    emissive.intensity,
+    emissive.rectLightIntensity,
+    emissive.monitorIntensity,
+    emissive.monitorColor,
+    emissive.monitorRotation,
+    emissive.monitorPosition,
+    emissive.tvIntensity,
+    emissive.tvColor,
+    emissive.tvRotation,
+    emissive.tvPosition,
+    // helpers
+    lighting.showHelpers,
+    // glass
     glass.metalness,
     glass.roughness,
     glass.envMapIntensity,
@@ -303,59 +369,6 @@ export function GLBModel({
     glass.ior,
     glass.side,
   ]);
-
-  // Reactively update glass material from debug UI
-  useEffect(() => {
-    if (!scene) return;
-    const windowObj = scene.getObjectByName("window") as THREE.Mesh | null;
-    if (!windowObj) return;
-    const mat = windowObj.material as THREE.MeshPhysicalMaterial | undefined;
-    if (!mat) return;
-    mat.metalness = glass.metalness as number;
-    mat.roughness = glass.roughness as number;
-    mat.envMapIntensity = glass.envMapIntensity as number;
-    mat.clearcoat = glass.clearcoat as number;
-    mat.transparent = glass.transparent as boolean;
-    if (typeof mat.transmission === "number") mat.transmission = glass.transmission as number;
-    if (typeof mat.thickness === "number") mat.thickness = glass.thickness as number;
-    mat.opacity = glass.opacity as number;
-    if (typeof mat.ior === "number") mat.ior = glass.ior as number;
-    const sideValue = (THREE as unknown as { FrontSide: number; BackSide: number; DoubleSide: number })[
-      glass.side as "FrontSide" | "BackSide" | "DoubleSide"
-    ];
-    if (typeof sideValue === "number") mat.side = sideValue as THREE.Side;
-    mat.needsUpdate = true;
-  }, [scene, glass.metalness, glass.roughness, glass.envMapIntensity, glass.clearcoat, glass.transparent, glass.transmission, glass.thickness, glass.opacity, glass.ior, glass.side]);
-
-  useEffect(() => {
-    if (!scene || !animations || animations.length === 0) return;
-    const fanObject = scene.getObjectByName("fan");
-    if (!fanObject) return;
-
-    // Gather all tracks that target the fan node
-    const fanTracks: THREE.KeyframeTrack[] = [];
-    for (const clip of animations) {
-      for (const track of clip.tracks) {
-        if (track.name.startsWith("fan.")) {
-          fanTracks.push(track);
-        }
-      }
-    }
-
-    if (fanTracks.length === 0) return;
-
-    mixerRef.current = new THREE.AnimationMixer(fanObject);
-    const fanClip = new THREE.AnimationClip("fanOnly", -1, fanTracks);
-    const action = mixerRef.current.clipAction(fanClip);
-    action.play();
-
-    return () => {
-      if (mixerRef.current) {
-        mixerRef.current.stopAllAction();
-        mixerRef.current = null;
-      }
-    };
-  }, [scene, animations]);
 
   return (
     <group ref={modelRef} position={position} scale={scale} rotation={rotation}>

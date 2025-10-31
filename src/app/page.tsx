@@ -1,6 +1,6 @@
 "use client";
 import { Canvas } from "@react-three/fiber";
-import { PointerLockControls, Environment } from "@react-three/drei";
+import { PointerLockControls, Environment, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { useEffect, useRef } from "react";
 import { useDebugUI } from "./hooks/useDebugUI";
@@ -35,11 +35,11 @@ export default function Home() {
       
       <Canvas
         shadows
-        dpr={[1.0, 1.0]}
+        dpr={[0.6, 0.7]}
 
         camera={{ position: camera.position as [number, number, number], fov: camera.fov as number, near: 0.1, far: 500 }}
         gl={{
-          antialias: true,
+          // antialias: true,
           toneMapping: THREE.ACESFilmicToneMapping,
           outputColorSpace: THREE.SRGBColorSpace,
         }}
@@ -60,6 +60,7 @@ export default function Home() {
         {/* Sync environment/background intensity, rotation and blur with the scene when supported */}
         <Lights />
         <CozyRoom />
+        {/* <OrbitControls/> */}
         <PointerLockControls  makeDefault />
         <Postprocessing />
       </Canvas>
