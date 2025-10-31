@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "PS1 Cozy Room",
-  description: "A ps1 inspired room",
+  description: "A ps1 inspired room'",
 };
 
 export default function RootLayout({
