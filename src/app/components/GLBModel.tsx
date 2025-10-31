@@ -315,7 +315,7 @@ export function GLBModel({
     // run orchestrated steps
     ensureJitterMaterials();
     syncBlanketUniforms();
-    // updateSurfacePBR();
+    updateSurfacePBR();
     const cleanupLights = ensureScreenRectLights();
     syncEmissiveAndRectLights();
     toggleHelpers();
