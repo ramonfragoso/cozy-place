@@ -35,7 +35,7 @@ export default function Home() {
       
       <Canvas
         shadows
-        dpr={[0.8, 0.8]}
+        dpr={[1.0, 1.0]}
 
         camera={{ position: camera.position as [number, number, number], fov: camera.fov as number, near: 0.1, far: 500 }}
         gl={{
