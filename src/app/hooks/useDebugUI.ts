@@ -50,6 +50,17 @@ export const useDebugUI = () => {
     fov: { value: 80, min: 0, max: 100, step: 0.1 },
   });
 
+  const emissiveControls = useControls("Emissive", {
+    intensity: { value: 0.01, min: 0, max: 1, step: 0.001 },
+    rectLightIntensity: { value: 15, min: 0, max: 1000, step: 0.5 },
+    monitorColor: "#ffffff",
+    monitorIntensity: { value: 15, min: 0, max: 1000, step: 0.5 },
+    monitorRotation: { value: [0, 0, 0], min: -3.1416, max: 3.1416, step: 0.01 },
+    tvColor: "#ffffff",
+    tvIntensity: { value: 15, min: 0, max: 1000, step: 0.5 },
+    tvRotation: { value: [0, 0, 0], min: -3.1416, max: 3.1416, step: 0.01 },
+  });
+
   const glassControls = useControls("Glass", {
     metalness: { value: 0.96, min: 0, max: 1, step: 0.01 },
     roughness: { value: 0.02, min: 0, max: 1, step: 0.01 },
@@ -71,5 +82,6 @@ export const useDebugUI = () => {
     environment: environmentControls,
     glass: glassControls,
     camera: cameraControls,
+    emissive: emissiveControls,
   };
 };

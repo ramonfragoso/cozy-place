@@ -4,6 +4,7 @@ import { useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
+import { RectAreaLightHelper } from "three/examples/jsm/helpers/RectAreaLightHelper.js";
 import { useDebugUI } from "../hooks/useDebugUI";
 import { createJitterMaterial } from "./shaders/createJitterMaterial";
 import CustomShaderMaterial from "three-custom-shader-material/vanilla";
@@ -50,7 +51,9 @@ export function GLBModel({
   const modelRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const screenLightRef = useRef<THREE.RectAreaLight | null>(null);
-  const { blanket, glass } = useDebugUI();
+  const screenLightRefs = useRef<THREE.RectAreaLight[]>([]);
+  const screenLightHelperRefs = useRef<RectAreaLightHelper[]>([]);
+  const { blanket, glass, emissive, lighting } = useDebugUI();
 
   // Auto-rotate animation
   useFrame((_, delta) => {
@@ -171,15 +174,91 @@ export function GLBModel({
       
       screen?.add(rectLight);
       screenLightRef.current = rectLight;
+      screenLightRefs.current.push(rectLight);
+
+      // helpers are added by a separate effect reacting to the UI flag
     })
       
     return () => {
+      // remove helpers first
+      for (const helper of screenLightHelperRefs.current) {
+        if (helper.parent) helper.parent.remove(helper);
+      }
+      screenLightHelperRefs.current = [];
+
+      // then remove lights
       if (screenLightRef.current && screenLightRef.current.parent) {
         screenLightRef.current.parent.remove(screenLightRef.current);
       }
       screenLightRef.current = null;
+      for (const light of screenLightRefs.current) {
+        if (light.parent) light.parent.remove(light);
+      }
+      screenLightRefs.current = [];
     };
   }, [scene]);
+
+  // Reactively update emissive intensities, colors and screen rect lights from debug UI
+  useEffect(() => {
+    if (!scene) return;
+
+    const screensNames = ["monitorscreen", "fanbulb", "tvscreen"];
+    const screens = screensNames.map((screenName) => scene.getObjectByName(screenName) as THREE.Mesh | null);
+    if (!screens.length) return;
+
+    const setEmissiveIntensity = (m: THREE.Material) => {
+      if (isEmissiveMaterial(m)) {
+        if (typeof (m as { emissiveIntensity?: number }).emissiveIntensity === "number") {
+          (m as { emissiveIntensity?: number }).emissiveIntensity = emissive.intensity as number;
+          m.needsUpdate = true;
+        }
+      }
+    };
+
+    screens.forEach((screen) => {
+      if (!screen) return;
+      const screenMaterial = screen.material as THREE.Material | THREE.Material[];
+      if (Array.isArray(screenMaterial)) {
+        screenMaterial.forEach(setEmissiveIntensity);
+      } else if (screenMaterial) {
+        setEmissiveIntensity(screenMaterial);
+      }
+
+      const rectLight = screen.getObjectByName(`${screen.name}-screen-light`) as THREE.RectAreaLight | null;
+      if (rectLight) {
+        if (screen.name === "monitorscreen") {
+          rectLight.intensity = emissive.monitorIntensity as number;
+          rectLight.color = new THREE.Color(emissive.monitorColor as string);
+          const [rx, ry, rz] = emissive.monitorRotation as unknown as [number, number, number];
+          rectLight.rotation.set(rx, ry, rz);
+        } else if (screen.name === "tvscreen") {
+          rectLight.intensity = emissive.tvIntensity as number;
+          rectLight.color = new THREE.Color(emissive.tvColor as string);
+          const [rx, ry, rz] = emissive.tvRotation as unknown as [number, number, number];
+          rectLight.rotation.set(rx, ry, rz);
+        } else {
+          rectLight.intensity = emissive.rectLightIntensity as number;
+        }
+      }
+    });
+  }, [scene, emissive.intensity, emissive.rectLightIntensity, emissive.monitorIntensity, emissive.monitorColor, emissive.monitorRotation, emissive.tvIntensity, emissive.tvColor, emissive.tvRotation]);
+
+  // Toggle helpers for the emissive RectAreaLights
+  useEffect(() => {
+    // remove any existing helpers
+    for (const helper of screenLightHelperRefs.current) {
+      if (helper.parent) helper.parent.remove(helper);
+    }
+    screenLightHelperRefs.current = [];
+
+    if (!lighting.showHelpers) return;
+
+    for (const light of screenLightRefs.current) {
+      const helper = new RectAreaLightHelper(light);
+      light.add(helper);
+      screenLightHelperRefs.current.push(helper);
+    }
+  }, [lighting.showHelpers]);
 
   // Assign custom glass-like material to the object named "window"
   useEffect(() => {
