@@ -1,13 +1,13 @@
 "use client";
-import { Canvas } from "@react-three/fiber";
-import { PointerLockControls, Environment, OrbitControls } from "@react-three/drei";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { PointerLockControls, Environment } from "@react-three/drei";
 import * as THREE from "three";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDebugUI } from "./hooks/useDebugUI";
-import { Leva } from "leva";
 import { CozyRoom } from "./components/CozyRoom";
 import { Lights } from "./components/Lights";
 import { Postprocessing } from "./components/Postprocessing";
+import { Leva } from "leva";
 
 
 
@@ -30,7 +30,7 @@ export default function Home() {
   return (
     <div className="w-full h-screen">
       <div className="z-50 absolute max-h-[100vh] overflow-auto top-1 right-1 rounded-md max-w-[370px] ">
-        <Leva fill />
+        <Leva hidden  fill />
       </div>
       
       <Canvas
@@ -48,6 +48,7 @@ export default function Home() {
           cameraRef.current = camera as THREE.PerspectiveCamera;
         }}
       >
+        <WheelZoom baseFov={camera.fov as number} />
         {environment.enabled && (
           <Environment
             files="/hdr_high.hdr"
@@ -66,4 +67,59 @@ export default function Home() {
       </Canvas>
     </div>
   );
+}
+
+const ZOOM_LEVELS = [1.2, 0.5, 0.2]; 
+const POINTER_SPEEDS = [1, 0.5, 0.25];
+
+function WheelZoom({ baseFov }: { baseFov: number }) {
+  const { camera } = useThree();
+  const controls = useThree((state) => state.controls) as unknown as { pointerSpeed?: number } | undefined;
+  const [zoomLevel, setZoomLevel] = useState(0); 
+  const baseFovRef = useRef(baseFov);
+  const targetFovRef = useRef(baseFov * ZOOM_LEVELS[0]);
+
+  useEffect(() => {
+    baseFovRef.current = baseFov;
+    targetFovRef.current = baseFov * ZOOM_LEVELS[zoomLevel];
+  }, [baseFov, zoomLevel]);
+
+  useEffect(() => {
+    if (controls && typeof controls.pointerSpeed === "number") {
+      controls.pointerSpeed = POINTER_SPEEDS[zoomLevel] ?? 1;
+    }
+  }, [controls, zoomLevel]);
+
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      // Listen at document level so it works even when pointer is locked
+      e.preventDefault();
+      const delta = e.deltaY;
+      setZoomLevel((currentLevel) => {
+        if (delta > 0) {
+          return Math.max(0, currentLevel - 1);
+        } else {
+          return Math.min(ZOOM_LEVELS.length - 1, currentLevel + 1);
+        }
+      });
+    };
+
+    document.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      document.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
+
+  useFrame((_, delta) => {
+    const cam = camera as THREE.PerspectiveCamera;
+    const current = cam.fov;
+    const target = targetFovRef.current;
+    if (Math.abs(current - target) < 0.01) return;
+    // smooth damp towards target
+    const lerpFactor = 1 - Math.pow(0.0001, delta); // time-independent smoothing
+    cam.fov = THREE.MathUtils.lerp(current, target, lerpFactor);
+    cam.updateProjectionMatrix();
+  });
+
+  return null;
 }
