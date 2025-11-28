@@ -5,40 +5,102 @@ import * as THREE from "three";
 import { useEffect, useRef, useState } from "react";
 import { useIsMobile } from "../hooks/useIsMobile";
 
-// Component to offset camera position on mobile after OrbitControls updates
-// This runs every frame to ensure the camera stays offset even when OrbitControls updates it
-function MobileCameraOffset({ offsetY }: { offsetY: number }) {
-  const { camera } = useThree();
-  const baseYRef = useRef<number | null>(null);
-  const isInitializedRef = useRef(false);
 
-  useFrame(() => {
+const ZOOM_LEVELS = [1.2, 0.5, 0.2];
+
+interface OrbitControlsWithSpeed {
+  rotateSpeed?: number;
+  enabled?: boolean;
+}
+
+// Component to adjust OrbitControls sensitivity based on zoom level
+function AdaptiveOrbitSensitivity({ 
+  baseFov, 
+  baseSensitivity = 1.0,
+  isPinching = false
+}: { 
+  baseFov: number;
+  baseSensitivity?: number;
+  isPinching?: boolean;
+}) {
+  const { camera, controls } = useThree();
+  const targetSpeedMultiplierRef = useRef(1.0);
+  const currentSpeedMultiplierRef = useRef(1.0);
+
+  // Update target speed multiplier when pinching state changes
+  useEffect(() => {
+    targetSpeedMultiplierRef.current = isPinching ? 0.0 : 1.0;
+  }, [isPinching]);
+
+  useFrame((_, delta) => {
     const cam = camera as THREE.PerspectiveCamera;
+    if (!cam || !controls) return;
+
+    // Smoothly interpolate speed multiplier towards target
+    const lerpFactor = 1 - Math.pow(0.01, delta); // Smooth interpolation
+    currentSpeedMultiplierRef.current = THREE.MathUtils.lerp(
+      currentSpeedMultiplierRef.current,
+      targetSpeedMultiplierRef.current,
+      lerpFactor
+    );
+
+    // Calculate sensitivity based on FOV
+    // When FOV is smaller (zoomed in), sensitivity should be lower
+    // Normalize FOV relative to base FOV to get a sensitivity multiplier
+    const fovRatio = cam.fov / baseFov;
+    const baseSensitivityValue = baseSensitivity * fovRatio;
     
-    if (!isInitializedRef.current) {
-      // On first frame, store the base Y (what OrbitControls set)
-      baseYRef.current = cam.position.y;
-      isInitializedRef.current = true;
-    }
-    
-    // Calculate what the natural Y should be (current - offset)
-    const naturalY = cam.position.y;
-    
-    // If the natural Y has changed significantly, OrbitControls updated it
-    if (baseYRef.current !== null && Math.abs(naturalY - baseYRef.current) > 0.1) {
-      baseYRef.current = naturalY;
-    }
-    
-    // Always maintain the offset
-    if (baseYRef.current !== null) {
-      cam.position.y = baseYRef.current + offsetY;
+    // Apply smooth speed multiplier (0 when pinching, 1 when not)
+    const sensitivity = baseSensitivityValue * currentSpeedMultiplierRef.current;
+
+    // Update OrbitControls sensitivity
+    if (controls && 'rotateSpeed' in controls) {
+      (controls as OrbitControlsWithSpeed).rotateSpeed = sensitivity;
     }
   });
 
   return null;
 }
 
-const ZOOM_LEVELS = [1.2, 0.5, 0.2];
+// Component to disable OrbitControls during pinch gestures
+function PinchLock({ onPinchStateChange }: { onPinchStateChange: (isPinching: boolean) => void }) {
+  useEffect(() => {
+    let isPinching = false;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        isPinching = true;
+        onPinchStateChange(true);
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2 && isPinching) {
+        isPinching = false;
+        onPinchStateChange(false);
+      }
+    };
+
+    const handleTouchCancel = () => {
+      if (isPinching) {
+        isPinching = false;
+        onPinchStateChange(false);
+      }
+    };
+
+    document.addEventListener("touchstart", handleTouchStart, { passive: true });
+    document.addEventListener("touchend", handleTouchEnd, { passive: true });
+    document.addEventListener("touchcancel", handleTouchCancel, { passive: true });
+
+    return () => {
+      document.removeEventListener("touchstart", handleTouchStart);
+      document.removeEventListener("touchend", handleTouchEnd);
+      document.removeEventListener("touchcancel", handleTouchCancel);
+    };
+  }, [onPinchStateChange]);
+
+  return null;
+}
 
 function WheelZoom({ baseFov }: { baseFov: number }) {
   const { camera } = useThree();
@@ -90,9 +152,9 @@ function WheelZoom({ baseFov }: { baseFov: number }) {
         );
         const delta = lastPinchDistance.current - distance;
         
-        if (Math.abs(delta) > 10) {
+        if (Math.abs(delta) > 80) {
           setZoomLevel((currentLevel) => {
-            if (delta > 0) {
+            if (delta < 0) {
               return Math.min(ZOOM_LEVELS.length - 1, currentLevel + 1);
             } else {
               return Math.max(0, currentLevel - 1);
@@ -158,6 +220,7 @@ export function CameraControls({
 }: CameraControlsProps) {
   const { camera } = useThree();
   const isMobile = useIsMobile();
+  const [isPinching, setIsPinching] = useState(false);
 
   // Sync camera position and FOV from debug UI
   useEffect(() => {
@@ -192,6 +255,7 @@ export function CameraControls({
       <WheelZoom baseFov={cameraFov} />
       {isMobile ? (
         <>
+          <PinchLock onPinchStateChange={setIsPinching} />
           <OrbitControls
             makeDefault
             enableZoom={false}
@@ -200,6 +264,11 @@ export function CameraControls({
             minPolarAngle={orbitMinPolarAngle}
             maxPolarAngle={orbitMaxPolarAngle}
             target={orbitTarget}
+            reverseOrbit
+          />
+          <AdaptiveOrbitSensitivity 
+            baseFov={cameraFov}
+            isPinching={isPinching}
           />
           {/* <MobileCameraOffset offsetY={mobileHeightOffset} /> */}
         </>

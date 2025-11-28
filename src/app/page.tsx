@@ -29,7 +29,7 @@ export default function Home() {
         </div>
       )}
       <div className="z-50 absolute max-h-[100vh] overflow-auto top-1 right-1 rounded-md max-w-[370px] ">
-        <Leva  fill />
+        <Leva hidden fill />
       </div>
 
       {/* Control instructions */}
