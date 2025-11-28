@@ -1,30 +1,21 @@
 "use client";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { PointerLockControls, Environment } from "@react-three/drei";
+import { Canvas } from "@react-three/fiber";
+import { Environment } from "@react-three/drei";
 import * as THREE from "three";
-import { useEffect, useRef, useState, Suspense } from "react";
+import { useRef, useState, Suspense } from "react";
 import { useDebugUI } from "./hooks/useDebugUI";
+import { useIsMobile } from "./hooks/useIsMobile";
 import { CozyRoom } from "./components/CozyRoom";
 import { Lights } from "./components/Lights";
 import { Postprocessing } from "./components/Postprocessing";
+import { CameraControls } from "./components/CameraControls";
 import { Leva } from "leva";
 
 export default function Home() {
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const { camera, environment } = useDebugUI();
   const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const cam = cameraRef.current;
-    if (!cam) return;
-    cam.position.set(
-      (camera.position as number[])[0],
-      (camera.position as number[])[1],
-      (camera.position as number[])[2]
-    );
-    cam.fov = camera.fov as number;
-    cam.updateProjectionMatrix();
-  }, [camera.position, camera.fov]);
+  const isMobile = useIsMobile();
 
   return (
     <div className="w-full h-screen">
@@ -38,11 +29,37 @@ export default function Home() {
         </div>
       )}
       <div className="z-50 absolute max-h-[100vh] overflow-auto top-1 right-1 rounded-md max-w-[370px] ">
-        <Leva hidden fill />
+        <Leva  fill />
       </div>
 
-      {/* Scroll to zoom indicator */}
-      <div className="fixed bottom-4 right-4 z-50 flex gap-2">
+      {/* Control instructions */}
+      <div className="fixed bottom-4 right-4 z-50 flex gap-2 flex-col">
+        {isMobile ? (
+          <>
+            <div className="flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-sm rounded-lg border border-white/20">
+              <svg
+                className="w-5 h-5 text-white animate-pulse"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                {/* Touch/finger icon */}
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  d="M12 4.5v15M7.5 12h9"
+                />
+                <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth={2} />
+              </svg>
+              <span className="text-white text-sm font-mono animate-pulse">
+                drag to rotate, pinch to zoom
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
         <div className="flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-sm rounded-lg border border-white/20">
           <svg
             className="w-5 h-5 text-white animate-pulse"
@@ -76,6 +93,8 @@ export default function Home() {
         <div className="flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-sm rounded-lg border border-white/20">
           <span className="text-white text-sm font-mono animate-pulse">press ESC to unlock the mouse cursor</span>
         </div>
+          </>
+        )}
       </div>
       <Canvas
         shadows
@@ -96,7 +115,11 @@ export default function Home() {
           cameraRef.current = camera as THREE.PerspectiveCamera;
         }}
       >
-        <WheelZoom baseFov={camera.fov as number} />
+        <CameraControls
+          cameraPosition={camera.position as number[]}
+          cameraFov={camera.fov as number}
+          cameraRef={cameraRef}
+        />
         {environment.enabled && (
           <Environment
             files="/hdr_high.hdr"
@@ -111,57 +134,8 @@ export default function Home() {
         <Suspense fallback={null}>
           <CozyRoom onLoad={() => setIsLoading(false)} />
         </Suspense>
-        {/* <OrbitControls/> */}
-        <PointerLockControls makeDefault />
         <Postprocessing />
       </Canvas>
     </div>
   );
-}
-
-const ZOOM_LEVELS = [1.2, 0.5, 0.2];
-
-function WheelZoom({ baseFov }: { baseFov: number }) {
-  const { camera } = useThree();
-  const [zoomLevel, setZoomLevel] = useState(0);
-  const baseFovRef = useRef(baseFov);
-  const targetFovRef = useRef(baseFov * ZOOM_LEVELS[0]);
-
-  useEffect(() => {
-    baseFovRef.current = baseFov;
-    targetFovRef.current = baseFov * ZOOM_LEVELS[zoomLevel];
-  }, [baseFov, zoomLevel]);
-
-  useEffect(() => {
-    const handleWheel = (e: WheelEvent) => {
-      // Listen at document level so it works even when pointer is locked
-      e.preventDefault();
-      const delta = e.deltaY;
-      setZoomLevel((currentLevel) => {
-        if (delta > 0) {
-          return Math.max(0, currentLevel - 1);
-        } else {
-          return Math.min(ZOOM_LEVELS.length - 1, currentLevel + 1);
-        }
-      });
-    };
-
-    document.addEventListener("wheel", handleWheel, { passive: false });
-    return () => {
-      document.removeEventListener("wheel", handleWheel);
-    };
-  }, []);
-
-  useFrame((_, delta) => {
-    const cam = camera as THREE.PerspectiveCamera;
-    const current = cam.fov;
-    const target = targetFovRef.current;
-    if (Math.abs(current - target) < 0.01) return;
-    // smooth damp towards target
-    const lerpFactor = 1 - Math.pow(0.0001, delta); // time-independent smoothing
-    cam.fov = THREE.MathUtils.lerp(current, target, lerpFactor);
-    cam.updateProjectionMatrix();
-  });
-
-  return null;
 }
