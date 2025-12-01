@@ -152,7 +152,7 @@ function WheelZoom({ baseFov }: { baseFov: number }) {
         );
         const delta = lastPinchDistance.current - distance;
         
-        if (Math.abs(delta) > 80) {
+        if (Math.abs(delta) > 60) {
           setZoomLevel((currentLevel) => {
             if (delta < 0) {
               return Math.min(ZOOM_LEVELS.length - 1, currentLevel + 1);
@@ -227,7 +227,6 @@ export function CameraControls({
     const cam = camera as THREE.PerspectiveCamera;
     if (!cam) return;
     
-    // Only update position for desktop (mobile is handled by MobileCameraOffset)
     if (!isMobile) {
       cam.position.set(
         cameraPosition[0],

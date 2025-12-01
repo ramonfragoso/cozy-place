@@ -3,6 +3,7 @@ import { Canvas } from "@react-three/fiber";
 import { Environment } from "@react-three/drei";
 import * as THREE from "three";
 import { useRef, useState, Suspense } from "react";
+import Image from "next/image";
 import { useDebugUI } from "./hooks/useDebugUI";
 import { useIsMobile } from "./hooks/useIsMobile";
 import { CozyRoom } from "./components/CozyRoom";
@@ -22,6 +23,14 @@ export default function Home() {
       {isLoading && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-4">
+            <Image 
+              src="/logo.png" 
+              alt="Logo" 
+              width={500}
+              height={500}
+              className="w-auto h-full object-contain"
+              priority
+            />
             <p className="text-white text-lg font-medium font-mono animate-pulse">
               loading
             </p>
@@ -111,7 +120,7 @@ export default function Home() {
           outputColorSpace: THREE.SRGBColorSpace,
         }}
         onCreated={({ camera }) => {
-          camera.lookAt(-4, 1, -1);
+          camera.lookAt(-3, 2, 0);
           cameraRef.current = camera as THREE.PerspectiveCamera;
         }}
       >
