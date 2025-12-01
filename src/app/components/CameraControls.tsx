@@ -212,7 +212,6 @@ export function CameraControls({
   cameraFov,
   cameraRef,
   onCameraCreated,
-  mobileHeightOffset = 5,
   orbitTarget = [0, 3, -1],
   orbitMaxDistance = 1.4,
   orbitMinPolarAngle = Math.PI / 6,
